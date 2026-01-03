@@ -38,6 +38,15 @@ class ContactController extends Controller
             });
         }
 
+        // Filter by Phone Number
+        $phone = $request->get('phone');
+        if ($phone) {
+            $query->where(function($q) use ($phone) {
+                $q->where('phone_number', 'like', "%{$phone}%")
+                  ->orWhere('phone_numbers', 'like', "%{$phone}%");
+            });
+        }
+
         // Filter by Gender
         $gender = $request->get('gender');
         if ($gender !== null && $gender !== '') {
@@ -123,11 +132,13 @@ class ContactController extends Controller
 
         // Legacy search parameter (for backward compatibility)
         $search = $request->get('search');
-        if ($search && !$name && !$email) {
+        if ($search && !$name && !$email && !$phone) {
             $query->where(function($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
                   ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('phone_number', 'like', "%{$search}%")
+                  ->orWhere('phone_numbers', 'like', "%{$search}%");
             });
         }
 

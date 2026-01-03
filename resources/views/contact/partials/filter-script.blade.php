@@ -13,6 +13,7 @@
     // Filter inputs
     const filterName = document.getElementById('filter-name');
     const filterEmail = document.getElementById('filter-email');
+    const filterPhone = document.getElementById('filter-phone');
     const filterGender = document.getElementById('filter-gender');
     const clearFiltersBtn = document.getElementById('clear-filters');
     
@@ -55,6 +56,10 @@
 
         if (filterEmail && filterEmail.value.trim()) {
             filters.email = filterEmail.value.trim();
+        }
+
+        if (filterPhone && filterPhone.value.trim()) {
+            filters.phone = filterPhone.value.trim();
         }
 
         if (filterGender && filterGender.value !== '') {
@@ -176,6 +181,10 @@
         filterEmail.addEventListener('input', debouncedFilter);
     }
 
+    if (filterPhone) {
+        filterPhone.addEventListener('input', debouncedFilter);
+    }
+
     if (filterGender) {
         filterGender.addEventListener('change', doFilter);
     }
@@ -189,6 +198,7 @@
         clearFiltersBtn.addEventListener('click', function() {
             if (filterName) filterName.value = '';
             if (filterEmail) filterEmail.value = '';
+            if (filterPhone) filterPhone.value = '';
             if (filterGender) filterGender.value = '';
             if (searchInput) searchInput.value = '';
             
@@ -206,6 +216,7 @@
             updateClearBtn();
             if ((!filterName || !filterName.value.trim()) && 
                 (!filterEmail || !filterEmail.value.trim()) && 
+                (!filterPhone || !filterPhone.value.trim()) &&
                 (!filterGender || filterGender.value === '')) {
                 debouncedFilter();
             }
