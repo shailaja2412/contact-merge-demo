@@ -21,12 +21,14 @@ class Contact extends Model
         'additional_files',
         'is_merged',
         'merged_into_contact_id',
+        'merge_history',
     ];
 
     protected $casts = [
         'phone_numbers' => 'array',
         'emails' => 'array',
         'additional_files' => 'array',
+        'merge_history' => 'array',
     ];
 
     public function customFieldValues()

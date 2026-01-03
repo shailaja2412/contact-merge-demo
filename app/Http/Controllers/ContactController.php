@@ -662,6 +662,12 @@ class ContactController extends Controller
             $mergedPhones = array_unique(array_merge($masterPhones, $secondaryPhones));
             $mergedPhones = array_values(array_filter($mergedPhones));
 
+            // Merge profile picture - use secondary if master doesn't have one (prevent data loss)
+            $mergedProfilePicture = $masterContact->profile_picture;
+            if (!$mergedProfilePicture && $contact->profile_picture) {
+                $mergedProfilePicture = $contact->profile_picture;
+            }
+
             // Merge additional files
             $masterFiles = is_array($masterContact->additional_files) 
                 ? $masterContact->additional_files 
@@ -673,34 +679,171 @@ class ContactController extends Controller
             $mergedFiles = array_unique(array_merge($masterFiles, $secondaryFiles));
             $mergedFiles = array_values(array_filter($mergedFiles));
 
+            // Store merge history before updating master contact
+            $mergeHistory = [
+                'merged_at' => now()->toDateTimeString(),
+                'secondary_contact_id' => $contact->id,
+                'secondary_contact_name' => $contact->first_name . ' ' . $contact->last_name,
+                'secondary_contact_email' => $contact->email,
+                'merged_by' => auth()->id() ?? null,
+            ];
+            
+            // Get existing merge history if any
+            $existingHistory = $masterContact->merge_history 
+                ? (is_array($masterContact->merge_history) ? $masterContact->merge_history : json_decode($masterContact->merge_history, true) ?? [])
+                : [];
+            
+            // Add new merge to history
+            $existingHistory[] = $mergeHistory;
+
             // Update master contact with merged data
             $masterContact->update([
                 'emails' => json_encode($mergedEmails),
                 'email' => $mergedEmails[0] ?? $masterContact->email,
                 'phone_numbers' => json_encode($mergedPhones),
                 'phone_number' => $mergedPhones[0] ?? $masterContact->phone_number,
+                'profile_picture' => $mergedProfilePicture ?? $masterContact->profile_picture,
                 'additional_files' => !empty($mergedFiles) ? json_encode($mergedFiles) : $masterContact->additional_files,
+                'merge_history' => json_encode($existingHistory),
             ]);
 
-            // Merge custom fields
+            // Merge custom fields with intelligent conflict handling
             $masterCustomFields = ContactCustomFields::where('contact_id', $masterContact->id)
-                ->pluck('value', 'custom_field_id')
+                ->get()
+                ->keyBy('custom_field_id');
+            
+            $secondaryCustomFields = ContactCustomFields::where('contact_id', $contact->id)->get();
+            
+            // Get field types for intelligent conflict resolution
+            $fieldIds = $secondaryCustomFields->pluck('custom_field_id')->unique();
+            $fieldTypes = CustomFields::whereIn('id', $fieldIds)
+                ->pluck('field_type', 'id')
                 ->toArray();
 
-            $secondaryCustomFields = ContactCustomFields::where('contact_id', $contact->id)->get();
-
             foreach ($secondaryCustomFields as $secondaryField) {
-                // If master doesn't have this custom field, add it
-                if (!isset($masterCustomFields[$secondaryField->custom_field_id])) {
-                    ContactCustomFields::create([
-                        'contact_id' => $masterContact->id,
-                        'custom_field_id' => $secondaryField->custom_field_id,
-                        'value' => $secondaryField->value,
-                    ]);
+                $fieldId = $secondaryField->custom_field_id;
+                $fieldType = $fieldTypes[$fieldId] ?? 'text';
+                
+                if (!isset($masterCustomFields[$fieldId])) {
+                    // Master doesn't have this field - add it (no conflict, no data loss)
+                    if (!empty($secondaryField->value)) {
+                        ContactCustomFields::create([
+                            'contact_id' => $masterContact->id,
+                            'custom_field_id' => $fieldId,
+                            'value' => $secondaryField->value,
+                        ]);
+                    }
+                } else {
+                    // Conflict: Both have the same field with potentially different values
+                    $masterValue = $masterCustomFields[$fieldId]->value;
+                    $secondaryValue = $secondaryField->value;
+                    
+                    // Always merge if secondary value is not empty (even if same, to ensure no data loss)
+                    if (!empty($secondaryValue)) {
+                        // Handle conflicts based on field type to prevent data loss
+                        if (in_array($fieldType, ['text', 'textarea'])) {
+                            // For text fields: Append secondary value if different (preserve both values)
+                            if (empty($masterValue)) {
+                                // Master is empty, use secondary value
+                                $masterCustomFields[$fieldId]->update(['value' => $secondaryValue]);
+                            } elseif ($masterValue !== $secondaryValue) {
+                                // Values are different - check if one contains the other
+                                if (strpos($masterValue, $secondaryValue) === false && strpos($secondaryValue, $masterValue) === false) {
+                                    // Both values are different and neither contains the other - append both
+                                    $mergedValue = trim($masterValue) . ' | ' . trim($secondaryValue);
+                                    $masterCustomFields[$fieldId]->update(['value' => $mergedValue]);
+                                } else {
+                                    // One contains the other - keep the longer/more complete value
+                                    $mergedValue = strlen($masterValue) >= strlen($secondaryValue) ? $masterValue : $secondaryValue;
+                                    if ($mergedValue !== $masterValue) {
+                                        $masterCustomFields[$fieldId]->update(['value' => $mergedValue]);
+                                    }
+                                }
+                            }
+                        } elseif ($fieldType === 'number') {
+                            // For numbers: Merge intelligently
+                            // Check if field name contains "fax" - treat as text-like for merging
+                            $isFaxField = false;
+                            $fieldModel = CustomFields::find($fieldId);
+                            if ($fieldModel && stripos($fieldModel->field_name, 'fax') !== false) {
+                                $isFaxField = true;
+                            }
+                            
+                            if ($isFaxField) {
+                                // Fax numbers: Append like text fields to preserve both values
+                                if (empty($masterValue)) {
+                                    $masterCustomFields[$fieldId]->update(['value' => $secondaryValue]);
+                                } elseif ($masterValue !== $secondaryValue) {
+                                    // Append if different
+                                    if (strpos($masterValue, $secondaryValue) === false && strpos($secondaryValue, $masterValue) === false) {
+                                        $mergedValue = trim($masterValue) . ' | ' . trim($secondaryValue);
+                                        $masterCustomFields[$fieldId]->update(['value' => $mergedValue]);
+                                    } else {
+                                        // One contains the other - keep the longer value
+                                        $mergedValue = strlen($masterValue) >= strlen($secondaryValue) ? $masterValue : $secondaryValue;
+                                        if ($mergedValue !== $masterValue) {
+                                            $masterCustomFields[$fieldId]->update(['value' => $mergedValue]);
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Regular numbers: Keep the larger value or use secondary if master is empty
+                                if (!empty($masterValue) && is_numeric($masterValue) && is_numeric($secondaryValue)) {
+                                    $mergedValue = max((float)$masterValue, (float)$secondaryValue);
+                                    if ($mergedValue != $masterValue) {
+                                        $masterCustomFields[$fieldId]->update(['value' => (string)$mergedValue]);
+                                    }
+                                } elseif (empty($masterValue)) {
+                                    // Master is empty, use secondary (even if not numeric, to prevent data loss)
+                                    $masterCustomFields[$fieldId]->update(['value' => $secondaryValue]);
+                                } elseif (!is_numeric($masterValue) && is_numeric($secondaryValue)) {
+                                    // Master is not numeric but secondary is - use secondary
+                                    $masterCustomFields[$fieldId]->update(['value' => $secondaryValue]);
+                                } elseif (is_numeric($masterValue) && !is_numeric($secondaryValue) && !empty($secondaryValue)) {
+                                    // Master is numeric but secondary is not - append as text
+                                    $mergedValue = trim($masterValue) . ' | ' . trim($secondaryValue);
+                                    $masterCustomFields[$fieldId]->update(['value' => $mergedValue]);
+                                }
+                            }
+                        } elseif ($fieldType === 'date') {
+                            // For dates: Keep the more recent date (newer information)
+                            try {
+                                if (!empty($masterValue)) {
+                                    $masterDate = \Carbon\Carbon::parse($masterValue);
+                                    $secondaryDate = \Carbon\Carbon::parse($secondaryValue);
+                                    if ($secondaryDate->gt($masterDate)) {
+                                        // Secondary date is more recent, update master
+                                        $masterCustomFields[$fieldId]->update(['value' => $secondaryValue]);
+                                    }
+                                } else {
+                                    // Master is empty, use secondary
+                                    $masterCustomFields[$fieldId]->update(['value' => $secondaryValue]);
+                                }
+                            } catch (\Exception $e) {
+                                // If date parsing fails, use secondary if master is empty
+                                if (empty($masterValue)) {
+                                    $masterCustomFields[$fieldId]->update(['value' => $secondaryValue]);
+                                }
+                            }
+                        } elseif ($fieldType === 'checkbox') {
+                            // For checkboxes: If secondary is checked, ensure master is checked
+                            // (OR logic - if either is true, result is true)
+                            if ($secondaryValue && !$masterValue) {
+                                $masterCustomFields[$fieldId]->update(['value' => $secondaryValue]);
+                            }
+                        } elseif ($fieldType === 'select') {
+                            // For select: Keep master's value if not empty, otherwise use secondary
+                            if (empty($masterValue) && !empty($secondaryValue)) {
+                                $masterCustomFields[$fieldId]->update(['value' => $secondaryValue]);
+                            }
+                        } else {
+                            // For other types: Keep master's value if not empty, otherwise use secondary
+                            if (empty($masterValue) && !empty($secondaryValue)) {
+                                $masterCustomFields[$fieldId]->update(['value' => $secondaryValue]);
+                            }
+                        }
+                    }
                 }
-                // If both have the same field but different values, keep master's value
-                // (as per requirement: "keep the master's value or append both values")
-                // We're keeping master's value here. If you want to append, you could modify this logic.
             }
 
             // Mark secondary contact as merged

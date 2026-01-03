@@ -175,7 +175,6 @@
                         <template x-for="(doc, idx) in documents" :key="idx">
                             <div class="flex items-center gap-2 mb-2">
                                 <input type="file" :name="'additional_files[]'"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
                                     class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">
                                 <button type="button" @click="documents.splice(idx, 1)"
                                     class="px-3 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
