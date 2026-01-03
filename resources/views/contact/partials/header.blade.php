@@ -46,7 +46,7 @@
                 :class="filterOpen ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : ''"
                 title="Toggle Filters">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
                 </svg>
             </button>
 
@@ -64,15 +64,14 @@
     </div>
 
     <!-- Filters Section (Toggleable) -->
-    <div x-show="filterOpen" 
+    <div x-show="filterOpen" style="display: none;" 
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0 transform -translate-y-2"
          x-transition:enter-end="opacity-100 transform translate-y-0"
          x-transition:leave="transition ease-in duration-150"
          x-transition:leave-start="opacity-100 transform translate-y-0"
          x-transition:leave-end="opacity-0 transform -translate-y-2"
-         class="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-         style="display: none;">
+         class="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
         <div class="flex flex-wrap gap-4 items-end">
             <!-- Name Filter -->
             <div class="flex-1 min-w-[200px]">
@@ -133,6 +132,7 @@
                                    placeholder="dd/mm/yyyy"
                                    pattern="\d{2}/\d{2}/\d{4}"
                                    data-custom-field-id="{{ $field->id }}"
+                                   data-field-type="date"
                                    class="w-full px-4 py-2 rounded-lg
                                           bg-white dark:bg-gray-700
                                           border border-gray-300 dark:border-gray-600
@@ -184,11 +184,6 @@
 @if (session('success'))
     <div class="p-4">
         <div class="text-sm text-green-600 dark:text-green-400">{{ session('success') }}</div>
-    </div>
-@endif
-@if (session('error'))
-    <div class="p-4">
-        <div class="text-sm text-red-600 dark:text-red-400">{{ session('error') }}</div>
     </div>
 @endif
 

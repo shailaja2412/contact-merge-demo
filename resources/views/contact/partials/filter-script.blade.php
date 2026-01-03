@@ -4,8 +4,11 @@
 @endphp
 <script>
 (function() {
-    const list = document.getElementById('custom-fields-list');
-    if (!list) return;
+    const list = document.getElementById('contacts-list');
+    if (!list) {
+        console.error('Table list element (contacts-list) not found');
+        return;
+    }
 
     // Filter inputs
     const filterName = document.getElementById('filter-name');
@@ -63,8 +66,19 @@
         const customFields = {};
         customFieldInputs.forEach(input => {
             const fieldId = input.getAttribute('data-custom-field-id');
+            const fieldType = input.getAttribute('data-field-type');
             if (input.value && input.value.trim()) {
-                customFields[fieldId] = input.value.trim();
+                let value = input.value.trim();
+                
+                // Convert date from dd/mm/yyyy to Y-m-d format for date fields
+                if (fieldType === 'date' && /^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+                    const parts = value.split('/');
+                    if (parts.length === 3) {
+                        value = parts[2] + '-' + parts[1] + '-' + parts[0]; // Y-m-d format
+                    }
+                }
+                
+                customFields[fieldId] = value;
             }
         });
         if (Object.keys(customFields).length > 0) {
@@ -140,7 +154,9 @@
                 return;
             }
             console.error('[filter] fetch error', err);
-            list.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">Filter failed. Try again later.</td></tr>';
+            if (list) {
+                list.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">Filter failed. Try again later.</td></tr>';
+            }
         } finally {
             showSpinner(false);
         }

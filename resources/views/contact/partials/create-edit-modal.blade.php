@@ -1,8 +1,9 @@
 <!-- CREATE/EDIT MODAL -->
-<div x-show="open" x-transition.opacity x-cloak
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+<div x-show="open" x-transition.opacity x-cloak style="display: none;"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    @click.self="if (!$event.target.closest('.flatpickr-calendar') && !$event.target.closest('.flatpickr-monthDropdown-months') && !$event.target.closest('.flatpickr-monthDropdown-month')) { open = false; }">
 
-    <div @click.outside="open = false" x-transition.scale
+    <div x-transition.scale
         class="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-2xl h-auto max-h-[90vh] flex flex-col">
 
         <!-- Modal Header (Fixed) -->
@@ -50,29 +51,46 @@
                     <div>
                         <label class="block text-sm mb-1 text-gray-700 dark:text-gray-300">First Name</label>
                         <input type="text" name="first_name" x-model="first_name" required
-                            class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">
+                            class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                            :class="fieldErrors['first_name'] ? 'border-red-500 dark:border-red-500' : ''">
+                        <template x-if="fieldErrors['first_name']">
+                            <p class="text-sm text-red-600 dark:text-red-400 mt-1" x-text="fieldErrors['first_name']"></p>
+                        </template>
                     </div>
 
                     <!-- Last Name -->
                     <div>
                         <label class="block text-sm mb-1 text-gray-700 dark:text-gray-300">Last Name</label>
                         <input type="text" name="last_name" x-model="last_name" required
-                            class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">
+                            class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                            :class="fieldErrors['last_name'] ? 'border-red-500 dark:border-red-500' : ''">
+                        <template x-if="fieldErrors['last_name']">
+                            <p class="text-sm text-red-600 dark:text-red-400 mt-1" x-text="fieldErrors['last_name']"></p>
+                        </template>
                     </div>
 
                     <!-- Email (Multiple) -->
                     <div>
                         <label class="block text-sm mb-1 text-gray-700 dark:text-gray-300">Emails</label>
                         <template x-for="(email, idx) in emails" :key="idx">
-                            <div class="flex items-center gap-2 mb-2">
-                                <input type="email" :name="'emails[]'" x-model="emails[idx]" required
-                                    class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">
-                                <button type="button" @click="emails.splice(idx, 1)"
-                                    class="px-3 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
-                                    x-show="emails.length > 1">
-                                    −
-                                </button>
+                            <div class="mb-2">
+                                <div class="flex items-center gap-2">
+                                    <input type="email" :name="'emails[]'" x-model="emails[idx]" required
+                                        class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                                        :class="fieldErrors['emails.' + idx] ? 'border-red-500 dark:border-red-500' : ''">
+                                    <button type="button" @click="emails.splice(idx, 1)"
+                                        class="px-3 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
+                                        x-show="emails.length > 1">
+                                        −
+                                    </button>
+                                </div>
+                                <template x-if="fieldErrors['emails.' + idx]">
+                                    <p class="text-sm text-red-600 dark:text-red-400 mt-1" x-text="fieldErrors['emails.' + idx]"></p>
+                                </template>
                             </div>
+                        </template>
+                        <template x-if="fieldErrors['emails']">
+                            <p class="text-sm text-red-600 dark:text-red-400 mt-1" x-text="fieldErrors['emails']"></p>
                         </template>
                         <button type="button" @click="emails.push('')"
                             class="text-sm text-blue-600 hover:text-blue-700 font-medium mt-1">+ Add
@@ -84,15 +102,30 @@
                         <label class="block text-sm mb-1 text-gray-700 dark:text-gray-300">Phone
                             Numbers</label>
                         <template x-for="(phone, idx) in phone_numbers" :key="idx">
-                            <div class="flex items-center gap-2 mb-2">
-                                <input type="text" :name="'phone_numbers[]'" x-model="phone_numbers[idx]"
-                                    class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">
-                                <button type="button" @click="phone_numbers.splice(idx, 1)"
-                                    class="px-3 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
-                                    x-show="phone_numbers.length > 1">
-                                    −
-                                </button>
+                            <div class="mb-2">
+                                <div class="flex items-center gap-2">
+                                    <input type="text" 
+                                        :name="'phone_numbers[]'" 
+                                        x-model="phone_numbers[idx]"
+                                        @input="phone_numbers[idx] = phone_numbers[idx].replace(/\D/g, '').slice(0, 10)"
+                                        maxlength="10"
+                                        pattern="[0-9]{10}"
+                                        placeholder="10 digits only"
+                                        class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                                        :class="fieldErrors['phone_numbers.' + idx] ? 'border-red-500 dark:border-red-500' : ''">
+                                    <button type="button" @click="phone_numbers.splice(idx, 1)"
+                                        class="px-3 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
+                                        x-show="phone_numbers.length > 1">
+                                        −
+                                    </button>
+                                </div>
+                                <template x-if="fieldErrors['phone_numbers.' + idx]">
+                                    <p class="text-sm text-red-600 dark:text-red-400 mt-1" x-text="fieldErrors['phone_numbers.' + idx]"></p>
+                                </template>
                             </div>
+                        </template>
+                        <template x-if="fieldErrors['phone_numbers']">
+                            <p class="text-sm text-red-600 dark:text-red-400 mt-1" x-text="fieldErrors['phone_numbers']"></p>
                         </template>
                         <button type="button" @click="phone_numbers.push('')"
                             class="text-sm text-blue-600 hover:text-blue-700 font-medium mt-1">+ Add
@@ -103,12 +136,16 @@
                     <div>
                         <label class="block text-sm mb-1 text-gray-700 dark:text-gray-300">Gender</label>
                         <select name="gender" x-model="gender"
-                            class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">
+                            class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                            :class="fieldErrors['gender'] ? 'border-red-500 dark:border-red-500' : ''">
                             <option value="">Select</option>
                             <option value="1">Male</option>
                             <option value="2">Female</option>
                             <option value="3">Other</option>
                         </select>
+                        <template x-if="fieldErrors['gender']">
+                            <p class="text-sm text-red-600 dark:text-red-400 mt-1" x-text="fieldErrors['gender']"></p>
+                        </template>
                     </div>
 
                     <!-- Additional Documents (Multiple) -->
@@ -159,36 +196,67 @@
                                 <label
                                     class="block text-sm mb-1 text-gray-700 dark:text-gray-300">{{ $field->field_name }}</label>
                                 @if($field->field_type === 'date')
-                                    <!-- <input type="text"
+                                    <input type="text"
                                         name="custom_fields[{{ $field->id }}]"
-                                        x-bind:value="customFieldValues[{{ $field->id }}] ? formatDateForInput(customFieldValues[{{ $field->id }}]) : ''"
+                                        x-model="customFieldValues[{{ $field->id }}]"
+                                        x-init="
+                                            $nextTick(() => {
+                                                if (typeof flatpickr !== 'undefined') {
+                                                    const fp = flatpickr($el, {
+                                                        dateFormat: 'd/m/Y',
+                                                        allowInput: true,
+                                                        clickOpens: true,
+                                                        appendTo: document.body,
+                                                        static: false,
+                                                        locale: {
+                                                            firstDayOfWeek: 1
+                                                        },
+                                                        onChange: function(selectedDates, dateStr, instance) {
+                                                            customFieldValues[{{ $field->id }}] = dateStr;
+                                                        },
+                                                        onOpen: function(selectedDates, dateStr, instance) {
+                                                            // Prevent modal from closing when calendar opens
+                                                            const calendar = instance.calendarContainer;
+                                                            if (calendar) {
+                                                                calendar.style.zIndex = '9999';
+                                                                // Prevent clicks on calendar from closing modal
+                                                                calendar.addEventListener('click', function(e) {
+                                                                    e.stopPropagation();
+                                                                });
+                                                            }
+                                                        }
+                                                    });
+                                                    // Set initial value if exists
+                                                    if (customFieldValues[{{ $field->id }}]) {
+                                                        const dateValue = customFieldValues[{{ $field->id }}];
+                                                        if (dateValue.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                                                            // Already in dd/mm/yyyy format
+                                                            fp.setDate(dateValue, false, 'd/m/Y');
+                                                        } else if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                                            // Convert from Y-m-d to dd/mm/yyyy
+                                                            const formatted = formatDateForInput(dateValue);
+                                                            fp.setDate(formatted, false, 'd/m/Y');
+                                                        }
+                                                    }
+                                                }
+                                            });
+                                        "
                                         placeholder="dd/mm/yyyy"
                                         autocomplete="off"
-                                        inputmode="text"
-                                        class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white date-input"
-                                        data-field-id="{{ $field->id }}"> -->
-
-
-
-
-<div class="relative max-w-sm">
-  <div class="absolute inset-y-0 start-0 flex items-center ps-3 pointer-events-none">
-    <svg class="w-4 h-4 text-body" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
-  </div>
-  <input datepicker id="default-datepicker" type="text" 
-  name="custom_fields[{{ $field->id }}]"
-                                        x-bind:value="customFieldValues[{{ $field->id }}] ? formatDateForInput(customFieldValues[{{ $field->id }}]) : ''"
-                                        placeholder="dd/mm/yyyy"
+                                        class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white date-picker-input"
                                         data-field-id="{{ $field->id }}"
-  class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white date-input" placeholder="Select date">
-</div>
-
+                                        :class="fieldErrors['custom_fields.{{ $field->id }}'] ? 'border-red-500 dark:border-red-500' : ''">
+                                        
                                 @else
                                     <input type="{{ $field->field_type }}"
                                         name="custom_fields[{{ $field->id }}]"
                                         x-bind:value="customFieldValues[{{ $field->id }}] || ''"
-                                        class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white">
+                                        class="w-full px-4 py-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white"
+                                        :class="fieldErrors['custom_fields.{{ $field->id }}'] ? 'border-red-500 dark:border-red-500' : ''">
                                 @endif
+                                <template x-if="fieldErrors['custom_fields.{{ $field->id }}']">
+                                    <p class="text-sm text-red-600 dark:text-red-400 mt-1" x-text="fieldErrors['custom_fields.{{ $field->id }}']"></p>
+                                </template>
                             </div>
                         @endforeach
                     </div>

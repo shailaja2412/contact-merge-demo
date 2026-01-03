@@ -17,10 +17,10 @@ class CustomFieldsController extends Controller
 
         if ($search) {
             $customFields = CustomFields::where('field_name', 'like', "%{$search}%")
-                ->orderBy('id', 'desc')
+                ->orderBy('id', 'asc')
                 ->get();
         } else {
-            $customFields = CustomFields::orderBy('id', 'desc')->get();
+            $customFields = CustomFields::orderBy('id', 'asc')->get();
         }
 
         $customFieldsTypes = ['text', 'number', 'date', 'checkbox', 'textarea', 'select'];

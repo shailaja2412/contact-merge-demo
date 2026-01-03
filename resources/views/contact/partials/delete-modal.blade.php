@@ -1,5 +1,5 @@
 <!-- DELETE CONFIRM MODAL -->
-<div x-show="deleteOpen" x-transition.opacity x-cloak
+<div x-show="deleteOpen" x-transition.opacity x-cloak style="display: none;"
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
 
     <div @click.outside="deleteOpen = false" x-transition.scale

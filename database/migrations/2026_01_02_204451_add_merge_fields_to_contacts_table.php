@@ -12,9 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('contacts', function (Blueprint $table) {
-            $table->boolean('is_merged')->default(false)->after('additional_files');
-            $table->foreignId('merged_into_contact_id')->nullable()->after('is_merged')
-                ->constrained('contacts')->onDelete('set null');
+            //
         });
     }
 
@@ -24,8 +22,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('contacts', function (Blueprint $table) {
-            $table->dropForeign(['merged_into_contact_id']);
-            $table->dropColumn(['is_merged', 'merged_into_contact_id']);
+            //
         });
     }
 };

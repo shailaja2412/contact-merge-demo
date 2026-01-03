@@ -7,6 +7,7 @@ use App\Models\ContactCustomFields;
 use App\Models\CustomFields;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
@@ -45,23 +46,79 @@ class ContactController extends Controller
 
         // Filter by Custom Fields
         $customFieldFilters = $request->get('custom_fields', []);
+        $allContactIds = null; // Initialize to null to handle the first filter correctly
+
         if (!empty($customFieldFilters) && is_array($customFieldFilters)) {
             foreach ($customFieldFilters as $fieldId => $value) {
                 if (!empty($value)) {
-                    $contactIds = ContactCustomFields::where('custom_field_id', $fieldId)
-                        ->where('value', 'like', "%{$value}%")
-                        ->pluck('contact_id')
-                        ->toArray();
+                    $field = CustomFields::find($fieldId);
+                    $isDateField = $field && $field->field_type === 'date';
                     
-                    if (!empty($contactIds)) {
-                        $query->whereIn('id', $contactIds);
+                    $contactIds = [];
+
+                    if ($isDateField) {
+                        $dateValue = $value;
+                        // Convert from dd/mm/yyyy to Y-m-d if needed
+                        if (preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $value)) {
+                            $parts = explode('/', $value);
+                            if (count($parts) === 3) {
+                                $dateValue = $parts[2] . '-' . $parts[1] . '-' . $parts[0];
+                            }
+                        }
+                        
+                        // Ensure date is in Y-m-d format
+                        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateValue)) {
+                            try {
+                                $carbon = \Carbon\Carbon::parse($dateValue);
+                                $dateValue = $carbon->format('Y-m-d');
+                            } catch (\Exception $e) {
+                                // If parsing fails, skip this filter
+                                continue;
+                            }
+                        }
+                        
+                        // Try exact match first
+                        $contactIds = ContactCustomFields::where('custom_field_id', $fieldId)
+                            ->where('value', $dateValue)
+                            ->pluck('contact_id')
+                            ->toArray();
+                        
+                        // If no exact match, try LIKE search (for partial dates)
+                        if (empty($contactIds)) {
+                            $contactIds = ContactCustomFields::where('custom_field_id', $fieldId)
+                                ->where('value', 'like', "%{$dateValue}%")
+                                ->pluck('contact_id')
+                                ->toArray();
+                        }
                     } else {
-                        // If no matches found, return empty result
-                        $query->whereRaw('1 = 0');
+                        // For non-date fields, use LIKE search
+                        $contactIds = ContactCustomFields::where('custom_field_id', $fieldId)
+                            ->where('value', 'like', "%{$value}%")
+                            ->pluck('contact_id')
+                            ->toArray();
+                    }
+                    
+                    if (empty($contactIds)) {
+                        $query->whereRaw('1 = 0'); // No matches for this filter, so no overall matches
                         break;
+                    }
+                    
+                    // Apply filter - intersect with previous filters (AND logic)
+                    if ($allContactIds === null) {
+                        $allContactIds = $contactIds;
+                    } else {
+                        $allContactIds = array_intersect($allContactIds, $contactIds);
+                        if (empty($allContactIds)) {
+                            $query->whereRaw('1 = 0'); // No matches after intersection
+                            break;
+                        }
                     }
                 }
             }
+        }
+
+        if ($allContactIds !== null) {
+            $query->whereIn('id', $allContactIds);
         }
 
         // Legacy search parameter (for backward compatibility)
@@ -145,44 +202,66 @@ class ContactController extends Controller
             $data['additional_files'] = json_encode($files);
         }
 
-        // Create contact
-        $contact = Contact::create($data);
+        try {
+            // Create contact
+            $contact = Contact::create($data);
 
-        // Handle custom fields
-        if ($request->has('custom_fields') && is_array($request->custom_fields)) {
-            foreach ($request->custom_fields as $fieldId => $value) {
-                if (! empty($value)) {
-                    // Get field type to check if it's a date field
-                    $field = CustomFields::find($fieldId);
-                    $processedValue = $value;
-                    
-                    // Convert dd/mm/yyyy to Y-m-d for date fields
-                    if ($field && $field->field_type === 'date') {
-                        $processedValue = $this->convertDateFormat($value);
-                    }
-                    
-                    if ($processedValue) {
-                        ContactCustomFields::create([
-                            'contact_id' => $contact->id,
-                            'custom_field_id' => $fieldId,
-                            'value' => $processedValue,
-                        ]);
+            // Handle custom fields
+            if ($request->has('custom_fields') && is_array($request->custom_fields)) {
+                foreach ($request->custom_fields as $fieldId => $value) {
+                    if (! empty($value)) {
+                        // Get field type to check if it's a date field
+                        $field = CustomFields::find($fieldId);
+                        $processedValue = $value;
+                        
+                        // Convert dd/mm/yyyy to Y-m-d for date fields
+                        if ($field && $field->field_type === 'date') {
+                            $processedValue = $this->convertDateFormat($value);
+                        }
+                        
+                        if ($processedValue) {
+                            ContactCustomFields::create([
+                                'contact_id' => $contact->id,
+                                'custom_field_id' => $fieldId,
+                                'value' => $processedValue,
+                            ]);
+                        }
                     }
                 }
             }
-        }
 
-        // AJAX request → return JSON
-        if ($request->ajax() || $request->wantsJson() || $request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
-            $contact->load('customFieldValues');
-            return response()->json([
-                'success' => true,
-                'message' => 'Contact created successfully.',
-                'contact' => $contact
-            ]);
-        }
+            // AJAX request → return JSON
+            if ($request->ajax() || $request->wantsJson() || $request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                $contact->load('customFieldValues');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Contact created successfully.',
+                    'contact' => $contact
+                ]);
+            }
 
-        return redirect()->route('contacts.index')->with('success', 'Contact created successfully.');
+            return redirect()->route('contacts.index')->with('success', 'Contact created successfully.');
+        } catch (\Exception $e) {
+            // Log the error for debugging but don't expose details to user
+            \Log::error('Contact creation failed: ' . $e->getMessage());
+            
+            // Check if it's a duplicate entry error
+            if (str_contains($e->getMessage(), 'Duplicate entry') || str_contains($e->getMessage(), '23000')) {
+                $errorMessage = 'A contact with this email or phone number already exists.';
+            } else {
+                $errorMessage = 'Something went wrong. Please try again.';
+            }
+            
+            // AJAX request → return JSON
+            if ($request->ajax() || $request->wantsJson() || $request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json([
+                    'success' => false,
+                    'message' => $errorMessage
+                ], 422);
+            }
+
+            return redirect()->route('contacts.index')->with('error', $errorMessage);
+        }
     }
 
     /**
@@ -265,48 +344,70 @@ class ContactController extends Controller
             $data['additional_files'] = json_encode($existingFiles);
         }
 
-        // Update contact
-        $contact->update($data);
+        try {
+            // Update contact
+            $contact->update($data);
 
-        // Update custom fields
-        if ($request->has('custom_fields') && is_array($request->custom_fields)) {
-            // Delete existing custom field values
-            ContactCustomFields::where('contact_id', $contact->id)->delete();
+            // Update custom fields
+            if ($request->has('custom_fields') && is_array($request->custom_fields)) {
+                // Delete existing custom field values
+                ContactCustomFields::where('contact_id', $contact->id)->delete();
 
-            // Create new ones
-            foreach ($request->custom_fields as $fieldId => $value) {
-                if (! empty($value)) {
-                    // Get field type to check if it's a date field
-                    $field = CustomFields::find($fieldId);
-                    $processedValue = $value;
-                    
-                    // Convert dd/mm/yyyy to Y-m-d for date fields
-                    if ($field && $field->field_type === 'date') {
-                        $processedValue = $this->convertDateFormat($value);
-                    }
-                    
-                    if ($processedValue) {
-                        ContactCustomFields::create([
-                            'contact_id' => $contact->id,
-                            'custom_field_id' => $fieldId,
-                            'value' => $processedValue,
-                        ]);
+                // Create new ones
+                foreach ($request->custom_fields as $fieldId => $value) {
+                    if (! empty($value)) {
+                        // Get field type to check if it's a date field
+                        $field = CustomFields::find($fieldId);
+                        $processedValue = $value;
+                        
+                        // Convert dd/mm/yyyy to Y-m-d for date fields
+                        if ($field && $field->field_type === 'date') {
+                            $processedValue = $this->convertDateFormat($value);
+                        }
+                        
+                        if ($processedValue) {
+                            ContactCustomFields::create([
+                                'contact_id' => $contact->id,
+                                'custom_field_id' => $fieldId,
+                                'value' => $processedValue,
+                            ]);
+                        }
                     }
                 }
             }
-        }
 
-        // AJAX request → return JSON
-        if ($request->ajax() || $request->wantsJson() || $request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
-            $contact->load('customFieldValues');
-            return response()->json([
-                'success' => true,
-                'message' => 'Contact updated successfully.',
-                'contact' => $contact
-            ]);
-        }
+            // AJAX request → return JSON
+            if ($request->ajax() || $request->wantsJson() || $request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                $contact->load('customFieldValues');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Contact updated successfully.',
+                    'contact' => $contact
+                ]);
+            }
 
-        return redirect()->route('contacts.index')->with('success', 'Contact updated.');
+            return redirect()->route('contacts.index')->with('success', 'Contact updated.');
+        } catch (\Exception $e) {
+            // Log the error for debugging but don't expose details to user
+            \Log::error('Contact update failed: ' . $e->getMessage());
+            
+            // Check if it's a duplicate entry error
+            if (str_contains($e->getMessage(), 'Duplicate entry') || str_contains($e->getMessage(), '23000')) {
+                $errorMessage = 'A contact with this email or phone number already exists.';
+            } else {
+                $errorMessage = 'Something went wrong. Please try again.';
+            }
+            
+            // AJAX request → return JSON
+            if ($request->ajax() || $request->wantsJson() || $request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json([
+                    'success' => false,
+                    'message' => $errorMessage
+                ], 422);
+            }
+
+            return redirect()->route('contacts.index')->with('error', $errorMessage);
+        }
     }
 
     /**
@@ -314,18 +415,58 @@ class ContactController extends Controller
      */
     public function destroy(Request $request, Contact $contact)
     {
-        $contact->delete();
+        try {
+            // Delete associated custom fields first
+            ContactCustomFields::where('contact_id', $contact->id)->delete();
+            
+            // Delete profile picture if exists
+            if ($contact->profile_picture) {
+                Storage::disk('public')->delete($contact->profile_picture);
+            }
+            
+            // Delete additional files if exist
+            if ($contact->additional_files) {
+                $files = is_array($contact->additional_files) 
+                    ? $contact->additional_files 
+                    : (json_decode($contact->additional_files, true) ?? []);
+                
+                foreach ($files as $file) {
+                    if ($file) {
+                        Storage::disk('public')->delete($file);
+                    }
+                }
+            }
+            
+            // Actually delete the contact record from database
+            $contact->delete();
 
-        // AJAX request → return JSON
-        if ($request->ajax() || $request->wantsJson() || $request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
-            return response()->json([
-                'success' => true,
-                'message' => 'Contact deleted successfully.'
-            ]);
+            // AJAX request → return JSON
+            if ($request->ajax() || $request->wantsJson() || $request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Contact deleted successfully.'
+                ]);
+            }
+
+            return redirect()->route('contacts.index')
+                ->with('success', 'Contact deleted.');
+        } catch (\Exception $e) {
+            // Log the error for debugging but don't expose details to user
+            \Log::error('Contact deletion failed: ' . $e->getMessage());
+            
+            $errorMessage = 'Something went wrong while deleting the contact. Please try again.';
+            
+            // AJAX request → return JSON
+            if ($request->ajax() || $request->wantsJson() || $request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json([
+                    'success' => false,
+                    'message' => $errorMessage
+                ], 422);
+            }
+
+            return redirect()->route('contacts.index')
+                ->with('error', $errorMessage);
         }
-
-        return redirect()->route('contacts.index')
-            ->with('success', 'Contact deleted.');
     }
 
     /**
@@ -464,8 +605,18 @@ class ContactController extends Controller
 
         // Prevent merging already merged contacts
         if ($contact->is_merged || $masterContact->is_merged) {
+            $errorMessage = 'Cannot merge contacts that are already merged.';
+            
+            // AJAX request → return JSON
+            if ($request->ajax() || $request->wantsJson() || $request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json([
+                    'success' => false,
+                    'message' => $errorMessage
+                ], 422);
+            }
+            
             return redirect()->route('contacts.index')
-                ->with('error', 'Cannot merge contacts that are already merged.');
+                ->with('error', $errorMessage);
         }
 
         // Start transaction
@@ -560,13 +711,35 @@ class ContactController extends Controller
 
             \DB::commit();
 
+            // AJAX request → return JSON
+            if ($request->ajax() || $request->wantsJson() || $request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Contacts merged successfully. The secondary contact has been marked as merged.'
+                ]);
+            }
+
             return redirect()->route('contacts.index')
                 ->with('success', 'Contacts merged successfully. The secondary contact has been marked as merged.');
 
         } catch (\Exception $e) {
             \DB::rollBack();
+            
+            // Log the error for debugging but don't expose details to user
+            \Log::error('Contact merge failed: ' . $e->getMessage());
+            
+            $errorMessage = 'Something went wrong while merging contacts. Please try again.';
+            
+            // AJAX request → return JSON
+            if ($request->ajax() || $request->wantsJson() || $request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json([
+                    'success' => false,
+                    'message' => $errorMessage
+                ], 422);
+            }
+            
             return redirect()->route('contacts.index')
-                ->with('error', 'An error occurred while merging contacts: ' . $e->getMessage());
+                ->with('error', $errorMessage);
         }
     }
 }

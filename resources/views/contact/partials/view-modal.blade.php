@@ -1,5 +1,5 @@
 <!-- VIEW CONTACT MODAL -->
-<div x-show="viewOpen" x-transition.opacity x-cloak
+<div x-show="viewOpen" x-transition.opacity x-cloak style="display: none;"
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
 
     <div @click.outside="viewOpen=false"

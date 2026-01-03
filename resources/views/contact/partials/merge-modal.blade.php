@@ -1,5 +1,5 @@
 <!-- MERGE MODAL - Master Contact Selection -->
-<div x-show="mergeOpen" x-transition.opacity x-cloak
+<div x-show="mergeOpen" x-transition.opacity x-cloak style="display: none;"
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
 
     <div @click.outside="mergeOpen = false" x-transition.scale
@@ -96,7 +96,7 @@
 </div>
 
 <!-- MERGE CONFIRMATION MODAL -->
-<div x-show="mergeConfirmOpen" x-transition.opacity x-cloak
+<div x-show="mergeConfirmOpen" x-transition.opacity x-cloak style="display: none;"
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
 
     <div @click.outside="mergeConfirmOpen = false" x-transition.scale
@@ -175,21 +175,15 @@
                 Back
             </button>
 
-            <form x-bind:action="`{{ url('contacts') }}/${mergeSecondaryContact.id}/merge`" method="POST" class="inline">
-                @csrf
-                <input type="hidden" name="master_contact_id" x-bind:value="mergeMasterContactId">
-                <button type="submit"
-                    class="px-6 py-2.5 rounded-full text-white
-                           bg-gradient-to-r from-purple-500 to-indigo-600
-                           hover:from-purple-600 hover:to-indigo-700
-                           shadow-md hover:shadow-lg
-                           focus:ring-4 focus:ring-purple-300 dark:focus:ring-purple-800
-                           transition-all">
-                    Confirm Merge
-                </button>
-            </form>
+            <button type="button" @click="submitMerge()"
+                class="px-6 py-2.5 rounded-full text-white
+                       bg-gradient-to-r from-purple-500 to-indigo-600
+                       hover:from-purple-600 hover:to-indigo-700
+                       shadow-md hover:shadow-lg
+                       focus:ring-4 focus:ring-purple-300 dark:focus:ring-purple-800
+                       transition-all">
+                Confirm Merge
+            </button>
         </div>
     </div>
 </div>
-
-
