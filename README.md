@@ -37,7 +37,7 @@
 2. composer install
 3. npm install
 4. php artisan migrate
-5. php artisan migrate db:seed --class=DatabaseSeeder
+5. php artisan db:seed --class=DatabaseSeeder
 6. npm run dev
 7. php artisan serve
 
