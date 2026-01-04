@@ -42,4 +42,4 @@
 7. php artisan serve
 
 ## Demo Video
-👉 (Google Drive / Loom link)
+👉 [Loom link](https://www.loom.com/share/ba93015fa01f447398e999a1b7cc7176)
